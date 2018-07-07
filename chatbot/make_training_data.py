@@ -16,7 +16,6 @@ def save_data(df, path, col_name):
 
 def main():
     connection = sqlite3.connect(DB_PATH)
-    cursor = connection.cursor()
     limit = 5000
     last_unix = 0
     cur_length = limit
