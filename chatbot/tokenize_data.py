@@ -7,14 +7,19 @@ import nltk
 from chatbot.config import *
 
 
+def initial_preprocess(line, whitelist):
+    words = [w.lower() for w in nltk.word_tokenize(line)]
+    words = [w for w in words if in_white_list(w, whitelist)]
+    return words
+
+
 def initial_preprocess_file(path, whitelist):
     data = []
     with open(path, 'r', encoding='utf8') as f:
         i = 0
         for line in f:
             i += 1
-            words = [w.lower() for w in nltk.word_tokenize(line)]
-            words = [w for w in words if in_white_list(w, whitelist)]
+            words = initial_preprocess(line, whitelist)
             data.append(words)
             if i % 10000 == 0:
                 print(f"{i + 1} done.")
