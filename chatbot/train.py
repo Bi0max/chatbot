@@ -118,12 +118,88 @@ class WeightsSaver(Callback):
 
 
 class TensorBoardPerBatch(TensorBoard):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.seen = 0
+    # discussion on per batch TensorBoard: https://github.com/keras-team/keras/issues/6692
+    def __init__(self, log_every=1, **kwargs):
+        super().__init__(**kwargs)
+        self.log_every = log_every
+        self.counter = 0
 
-    def on_batch_end(self, batch, logs=None):
+    def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
+        self.counter += 1
+
+        if not self.validation_data and self.histogram_freq:
+            raise ValueError("If printing histograms, validation_data must be "
+                             "provided, and cannot be a generator.")
+        if self.embeddings_data is None and self.embeddings_freq:
+            raise ValueError("To visualize embeddings, embeddings_data must "
+                             "be provided.")
+        if self.validation_data and self.histogram_freq:
+            if epoch % self.histogram_freq == 0:
+
+                val_data = self.validation_data
+                tensors = (self.model.inputs +
+                           self.model.targets +
+                           self.model.sample_weights)
+
+                if self.model.uses_learning_phase:
+                    tensors += [K.learning_phase()]
+
+                assert len(val_data) == len(tensors)
+                val_size = val_data[0].shape[0]
+                i = 0
+                while i < val_size:
+                    step = min(self.batch_size, val_size - i)
+                    if self.model.uses_learning_phase:
+                        # do not slice the learning phase
+                        batch_val = [x[i:i + step] for x in val_data[:-1]]
+                        batch_val.append(val_data[-1])
+                    else:
+                        batch_val = [x[i:i + step] for x in val_data]
+                    assert len(batch_val) == len(tensors)
+                    feed_dict = dict(zip(tensors, batch_val))
+                    result = self.sess.run([self.merged], feed_dict=feed_dict)
+                    summary_str = result[0]
+                    self.writer.add_summary(summary_str, epoch)
+                    i += self.batch_size
+
+        if self.embeddings_freq and self.embeddings_data is not None:
+            if epoch % self.embeddings_freq == 0:
+                # We need a second forward-pass here because we're passing
+                # the `embeddings_data` explicitly. This design allows to pass
+                # arbitrary data as `embeddings_data` and results from the fact
+                # that we need to know the size of the `tf.Variable`s which
+                # hold the embeddings in `set_model`. At this point, however,
+                # the `validation_data` is not yet set.
+
+                # More details in this discussion:
+                # https://github.com/keras-team/keras/pull/7766#issuecomment-329195622
+
+                embeddings_data = self.embeddings_data
+                n_samples = embeddings_data[0].shape[0]
+
+                i = 0
+                while i < n_samples:
+                    step = min(self.batch_size, n_samples - i)
+                    batch = slice(i, i + step)
+
+                    if type(self.model.input) == list:
+                        feed_dict = {model_input: embeddings_data[idx][batch]
+                                     for idx, model_input in enumerate(self.model.input)}
+                    else:
+                        feed_dict = {self.model.input: embeddings_data[0][batch]}
+
+                    feed_dict.update({self.batch_id: i, self.step: step})
+
+                    if self.model.uses_learning_phase:
+                        feed_dict[K.learning_phase()] = False
+
+                    self.sess.run(self.assign_embeddings, feed_dict=feed_dict)
+                    self.saver.save(self.sess,
+                                    os.path.join(self.log_dir, 'keras_embedding.ckpt'),
+                                    epoch)
+
+                    i += self.batch_size
 
         for name, value in logs.items():
             if name in ['batch', 'size']:
@@ -132,10 +208,23 @@ class TensorBoardPerBatch(TensorBoard):
             summary_value = summary.value.add()
             summary_value.simple_value = value.item()
             summary_value.tag = name
-            self.writer.add_summary(summary, self.seen)
+            self.writer.add_summary(summary, self.counter)
         self.writer.flush()
 
-        self.seen += self.batch_size
+    def on_batch_end(self, batch, logs=None):
+        self.counter += 1
+        if self.counter % self.log_every == 0:
+            for name, value in logs.items():
+                if name in ['batch', 'size']:
+                    continue
+                summary = tf.Summary()
+                summary_value = summary.value.add()
+                summary_value.simple_value = value.item()
+                summary_value.tag = name
+                self.writer.add_summary(summary, self.counter)
+            self.writer.flush()
+
+        super().on_batch_end(batch, logs)
 
 
 def schedule(epoch, lr):
