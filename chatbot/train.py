@@ -139,7 +139,10 @@ class TensorBoardPerBatch(TensorBoard):
 
 
 def schedule(epoch, lr):
-    new_lr = HPARAMS['lr_schedule'][epoch]
+    if epoch in HPARAMS['lr_schedule']:
+        new_lr = HPARAMS['lr_schedule'][epoch]
+    else:
+        new_lr = lr
     print(f"Current epoch: {epoch}. Current lr: {lr}. New lr: {new_lr}")
     return new_lr
 
