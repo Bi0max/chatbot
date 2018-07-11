@@ -48,9 +48,9 @@ PREPROCESSING_PARAMS.update(
     })
 
 HPARAMS = {
-    'batch_size':128,
-    'num_epochs': 4,
-    'hidden_units': 128,
+    'batch_size': 128,
+    'num_epochs': 8,
+    'hidden_units': 256,
     'n_batches_to_save': 1000, # each N batches Keras will save the model
     'lr_schedule': {0: 0.001, 1: 0.0005, 2: 0.00025, 3: 0.0001}
 }

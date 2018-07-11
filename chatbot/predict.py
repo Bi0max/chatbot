@@ -3,10 +3,14 @@ from copy import deepcopy
 
 import numpy as np
 from keras.models import load_model
+from manager import Manager
 
 from chatbot.config import *
 from chatbot.tokenize_data import initial_preprocess
 from chatbot.train import create_model_input_output, create_model
+
+
+manager = Manager()
 
 
 def cosine_similarity(u, v):
@@ -73,6 +77,7 @@ def reply(input_text, encoder_model, decoder_model, word2index, index2word, prep
 
 def reply_beam(input_text, encoder_model, decoder_model, word2index, index2word, preprocessing_params, b=1):
     words = initial_preprocess(input_text, preprocessing_params['whitelist'])
+    print(f"Your text: {words}")
     encoder_input, _ = create_model_input_output(
         [words], [[]], word2index, preprocessing_params)[0]
 
@@ -145,25 +150,34 @@ def reply_beam(input_text, encoder_model, decoder_model, word2index, index2word,
     return probable_predictions
 
 
-def do_inference():
+@manager.command()
+def do_inference(file_name=None):
+    if file_name is not None:
+        path = os.path.join(PATHS['models_dir'], file_name)
+    else:
+        path = PATHS["model"]
     # read matrix, index
     embedding_matrix = pickle.load(open(PATHS["embedding_matrix"], "rb"))
     word2index = pickle.load(open(PATHS["word2index"], "rb"))
     index2word = pickle.load(open(PATHS["index2word"], "rb"))
 
     model, encoder_model, decoder_model = create_model(PREPROCESSING_PARAMS, HPARAMS, for_inference=True)
-    model.load_weights(PATHS["model"])
+    model.load_weights(path)
 
     finished = False
     while not finished:
         text = input("Input text (to finish enter 'f'): ")
+        if text == "" or text is None:
+            text = "How are you doing?"
         if text == 'f':
             finished = True
             continue
         replies = reply_beam(text, encoder_model, decoder_model, word2index, index2word, PREPROCESSING_PARAMS, b=30)
         replies_without_unk = [r for r in replies if PREPROCESSING_PARAMS['unk'] not in r]
-        print(replies_without_unk)
+        print(len(replies_without_unk))
+        for r in replies_without_unk:
+            print(r)
 
 
 if __name__ == '__main__':
-    do_inference()
+    manager.main()
