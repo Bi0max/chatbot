@@ -7,8 +7,7 @@ from manager import Manager
 
 from chatbot.config import *
 from chatbot.tokenize_data import initial_preprocess
-from chatbot.train import create_model_input_output, create_model
-
+from chatbot.train import create_model_input_output, create_model, create_model_attention
 
 manager = Manager()
 
@@ -36,6 +35,19 @@ def argmax_b_2d(arr, b):
         indices[i, 0] = idx % n_rows
         indices[i, 1] = idx // n_rows
     return indices
+
+
+def reply_attention(input_text, model, word2index, index2word, preprocessing_params, hparams):
+    words = initial_preprocess(input_text, preprocessing_params['whitelist'])
+    encoder_input, _ = create_model_input_output(
+        [words], [[]], word2index, preprocessing_params)[0]
+    s0 = np.zeros((hparams['batch_size'], hparams['hidden_units']))
+    c0 = np.zeros((hparams['batch_size'], hparams['hidden_units']))
+
+    prediction = model.predict([encoder_input, s0, c0])
+    prediction = np.argmax(prediction, axis=-1)
+    output = [index2word[int(i)] for i in prediction]
+    return str.join(' ', output)
 
 
 def reply(input_text, encoder_model, decoder_model, word2index, index2word, preprocessing_params, b=1):
@@ -177,6 +189,35 @@ def do_inference(file_name=None):
         print(len(replies_without_unk))
         for r in replies_without_unk:
             print(r)
+
+
+@manager.command()
+def do_inference_attention(file_name=None):
+    if file_name is not None:
+        path = os.path.join(PATHS['models_dir'], file_name)
+    else:
+        path = PATHS["model"]
+    # read matrix, index
+    embedding_matrix = pickle.load(open(PATHS["embedding_matrix"], "rb"))
+    word2index = pickle.load(open(PATHS["word2index"], "rb"))
+    index2word = pickle.load(open(PATHS["index2word"], "rb"))
+
+    model = create_model_attention(PREPROCESSING_PARAMS, HPARAMS, for_inference=False)
+    model.load_weights(path)
+
+    finished = False
+    while not finished:
+        text = input("Input text (to finish enter 'f'): ")
+        if text == "" or text is None:
+            text = "How are you doing?"
+        if text == 'f':
+            finished = True
+            continue
+        replies = reply_attention(text, model, word2index, index2word, PREPROCESSING_PARAMS, HPARAMS)
+        # replies_without_unk = [r for r in replies if PREPROCESSING_PARAMS['unk'] not in r]
+        # print(len(replies_without_unk))
+        # for r in replies_without_unk:
+        print(replies)
 
 
 if __name__ == '__main__':
