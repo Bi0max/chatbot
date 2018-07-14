@@ -143,25 +143,32 @@ def softmax(x, axis=1):
         raise ValueError('Cannot apply softmax to a tensor that is 1D')
 
 
-def create_model_attention(preprocessing_params, hparams, embedding_matrix=None, for_inference=False):
-    max_seq_length = preprocessing_params['max_seq_length']
-    max_seq_input_length = max_seq_output_length = max_seq_length
+def create_model_attention(preprocessing_params, hparams, embedding_matrix=None, use_embedding=True,
+                           for_inference=False, bilstm=True):
+    max_seq_input_length = max_seq_length = preprocessing_params['max_seq_length_input']
+    max_seq_output_length = preprocessing_params['max_seq_length_output']
     vocab_size = preprocessing_params['full_vocab_size']
-    emb_size = preprocessing_params['glove_embedding_size']
     hidden_units = hparams['hidden_units']
     hidden_units_encoder = hidden_units // 2
     # layers declaration
-    if embedding_matrix is not None:
-        # set pretrained weights
-        shared_embedding = Embedding(
-            input_dim=vocab_size, output_dim=emb_size, input_length=max_seq_length, mask_zero=True,
-            weights=[embedding_matrix], name='shared_embedding')
-    else:
-        shared_embedding = Embedding(
-            input_dim=vocab_size, output_dim=emb_size, input_length=max_seq_length, mask_zero=True,
-            name='shared_embedding')
+    if use_embedding:
+        emb_size = preprocessing_params['glove_embedding_size']
+        if embedding_matrix is not None:
+            # set pretrained weights
+            shared_embedding = Embedding(
+                input_dim=vocab_size, output_dim=emb_size, input_length=max_seq_length, mask_zero=True,
+                weights=[embedding_matrix], name='shared_embedding')
+        else:
+            shared_embedding = Embedding(
+                input_dim=vocab_size, output_dim=emb_size, input_length=max_seq_length, mask_zero=True,
+                name='shared_embedding')
 
-    encoder_lstm = Bidirectional(LSTM(units=hidden_units_encoder, return_sequences=True, name='encoder_lstm'))
+    if bilstm:
+        print("Model with Bidirectional LSTM")
+        encoder_lstm = Bidirectional(LSTM(units=hidden_units_encoder, return_sequences=True, name='encoder_lstm'))
+    else:
+        print("Model without Bidirectional LSTM")
+        encoder_lstm = LSTM(units=hidden_units_encoder, return_sequences=True, name='encoder_lstm')
 
     decoder_lstm = LSTM(units=hidden_units, return_state=True, name='decoder_lstm')
     decoder_dense = Dense(units=vocab_size, activation=softmax, name='decoder_dense')
@@ -205,7 +212,7 @@ def create_model_attention(preprocessing_params, hparams, embedding_matrix=None,
     # model structure
 
     # Inputs
-    encoder_inputs = Input(shape=(max_seq_input_length,), name='encoder_inputs')
+
     # Define s0 and c0, initial hidden state for the decoder LSTM of shape (n_s,)
     s0 = Input(shape=(hidden_units,), name='s0')
     c0 = Input(shape=(hidden_units,), name='c0')
@@ -213,8 +220,13 @@ def create_model_attention(preprocessing_params, hparams, embedding_matrix=None,
     c = c0
 
     # Step 1: Define pre-attention Bi-LSTM
-    encoder_embeddings = shared_embedding(encoder_inputs)
-    encoder_outputs = encoder_lstm(encoder_embeddings)
+    if use_embedding:
+        encoder_inputs = Input(shape=(max_seq_input_length,), name='encoder_inputs')
+        encoder_embeddings = shared_embedding(encoder_inputs)
+        encoder_outputs = encoder_lstm(encoder_embeddings)
+    else:
+        encoder_inputs = Input(shape=(max_seq_input_length, vocab_size), name='encoder_inputs')
+        encoder_outputs = encoder_lstm(encoder_inputs)
 
     # Initialize empty list of outputs
     outputs = []

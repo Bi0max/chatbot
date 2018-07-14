@@ -22,7 +22,8 @@ PATHS = {
     'word2index': os.path.join(DATA_DIR, 'w2i.pickle'),
     'model': os.path.join(MODELS_DIR, 'model.h5'),
     'log_dir': os.path.join(PROJ_DIR, "logs"),
-    'models_dir': os.path.join(PROJ_DIR, "models")
+    'models_dir': os.path.join(PROJ_DIR, "models"),
+    'data_dir': os.path.join(PROJ_DIR, "data")
 }
 
 _glove_embedding_size = 100
@@ -30,6 +31,8 @@ _glove_model = os.path.join(DATA_DIR, "glove.6B." + str(_glove_embedding_size) +
 
 PREPROCESSING_PARAMS = {
     'max_seq_length': 50,
+    'max_seq_length_input': 50,
+    'max_seq_length_output': 50,
     'glove_embedding_size': _glove_embedding_size,
     'glove_model': _glove_model,
     'whitelist': "abcdefghijklmnopqrstuvwxyz1234567890?!.,'",
